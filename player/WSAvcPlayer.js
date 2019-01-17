@@ -78,6 +78,9 @@ class WSAvcPlayer extends EventEmitter {
             }
             else if ((data[4] & 0x1f) === 7) {
                 naltype = 'SPS'
+                setTimeout(() => {
+                  this.emit('message', 'binary')
+                }, 10)
             }
             else if ((data[4] & 0x1f) === 8) {
                 naltype = 'PPS'
