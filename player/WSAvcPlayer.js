@@ -10,6 +10,7 @@ import debug from 'debug' // ?? why?
 
 
 const log = debug('wsavc')
+
 class WSAvcPlayer extends EventEmitter {
     constructor (canvas, canvastype, useWorker) {
         super()
@@ -43,42 +44,42 @@ class WSAvcPlayer extends EventEmitter {
         let naltype = 'invalid frame'
         // TODO fix type recog: const frameType = data[0] & 0x1f
         /*
-        0      Unspecified                                                    non-VCL
-        1      Coded slice of a non-IDR picture                               VCL
-        2      Coded slice data partition A                                   VCL
-        3      Coded slice data partition B                                   VCL
-        4      Coded slice data partition C                                   VCL
-        5      Coded slice of an IDR picture                                  VCL
-        6      Supplemental enhancement information (SEI)                     non-VCL
-        7      Sequence parameter set                                         non-VCL
-        8      Picture parameter set                                          non-VCL
-        9      Access unit delimiter                                          non-VCL
-        10     End of sequence                                                non-VCL
-        11     End of stream                                                  non-VCL
-        12     Filler data                                                    non-VCL
-        13     Sequence parameter set extension                               non-VCL
-        14     Prefix NAL unit                                                non-VCL
-        15     Subset sequence parameter set                                  non-VCL
-        16     Depth parameter set                                            non-VCL
-        17..18 Reserved                                                       non-VCL
-        19     Coded slice of an auxiliary coded picture without partitioning non-VCL
-        20     Coded slice extension                                          non-VCL
-        21     Coded slice extension for depth view components                non-VCL
-        22..23 Reserved                                                       non-VCL
-        24..31 Unspecified                                                    non-VCL
-
+            0      Unspecified                                                    non-VCL
+            1      Coded slice of a non-IDR picture                               VCL
+            2      Coded slice data partition A                                   VCL
+            3      Coded slice data partition B                                   VCL
+            4      Coded slice data partition C                                   VCL
+            5      Coded slice of an IDR picture                                  VCL
+            6      Supplemental enhancement information (SEI)                     non-VCL
+            7      Sequence parameter set                                         non-VCL
+            8      Picture parameter set                                          non-VCL
+            9      Access unit delimiter                                          non-VCL
+            10     End of sequence                                                non-VCL
+            11     End of stream                                                  non-VCL
+            12     Filler data                                                    non-VCL
+            13     Sequence parameter set extension                               non-VCL
+            14     Prefix NAL unit                                                non-VCL
+            15     Subset sequence parameter set                                  non-VCL
+            16     Depth parameter set                                            non-VCL
+            17..18 Reserved                                                       non-VCL
+            19     Coded slice of an auxiliary coded picture without partitioning non-VCL
+            20     Coded slice extension                                          non-VCL
+            21     Coded slice extension for depth view components                non-VCL
+            22..23 Reserved                                                       non-VCL
+            24..31 Unspecified                                                    non-VCL
         */
+
         if (data.length > 4) {
-            if (data[4] === 0x65) {
+            if ((data[4] & 0x1f) === 5) {
                 naltype = 'I frame'
             }
-            else if (data[4] === 0x41) {
+            else if ((data[4] & 0x1f) === 1) {
                 naltype = 'P frame'
             }
-            else if (data[4] === 0x67) {
+            else if ((data[4] & 0x1f) === 7) {
                 naltype = 'SPS'
             }
-            else if (data[4] === 0x68) {
+            else if ((data[4] & 0x1f) === 8) {
                 naltype = 'PPS'
             }
         }
@@ -90,13 +91,14 @@ class WSAvcPlayer extends EventEmitter {
         this.avc.decode(data)
     }
 
-    connect (url) {
-
+    connect(url, isPortrait) {
+        this.autoWidth = !isPortrait
         // Websocket initialization
         if (this.ws !== undefined) {
             this.ws.close()
             delete this.ws
         }
+
         this.ws = new WebSocket(url)
         this.ws.binaryType = 'arraybuffer'
 
@@ -104,7 +106,6 @@ class WSAvcPlayer extends EventEmitter {
             log('Connected to ' + url)
             this.emit('connected', url)
         }
-
 
         let framesList = []
 
@@ -128,23 +129,26 @@ class WSAvcPlayer extends EventEmitter {
             if (!running)
                 return
 
-
+            // 帧队列长度超过 30，判断是否有 SPS帧（即起始帧）
             if (framesList.length > 30) {
                 log('Dropping frames', framesList.length)
                 const vI = framesList.findIndex(e => (e[4] & 0x1f) === 7)
                 // console.log('Dropping frames', framesList.length, vI)
                 if (vI >= 0) {
+                    // 包含新的起始帧，则帧队列数据更新为起始帧之后的数据
+                    // [I, I, I, SPS, PPS, I, I, I, ...]
                     framesList = framesList.slice(vI)
                 }
                 // framesList = []
             }
-
+            // 下面开始逐帧绘制
             const frame = framesList.shift()
             this.emit('frame_shift', framesList.length)
 
             if (frame)
                 this.decode(frame)
 
+            // 「逐帧函数」，这里是执行绘制入口
             requestAnimationFrame(shiftFrame)
         }.bind(this)
 
@@ -167,19 +171,29 @@ class WSAvcPlayer extends EventEmitter {
             : YUVCanvas
 
         const canvas = new canvasFactory(this.canvas, new Size(width, height))
+        
         this.avc.onPictureDecoded = (e, w, h, ...rest) => {
             // console.log(rest)
             if (w !== width || h !== height) {
                 return this.initCanvas(w, h, [ e, w, h, ...rest ])
             }
+
             return canvas.decode(e, w, h, ...rest)
         }
+        if (this.canvas.parentNode && this.canvas.parentNode.parentNode) {
+            this.canvas.parentNode.parentNode.classList.toggle('letterboxed', this.autoWidth)
+        }
+        
         this.canvas.width = width
         this.canvas.height = height
 
         if (dec) {
             return canvas.decode(...dec)
         }
+    }
+
+    rotateCanvas () {
+      this.autoWidth = !this.autoWidth
     }
 
     cmd (cmd) {
@@ -189,7 +203,6 @@ class WSAvcPlayer extends EventEmitter {
             const { width, height } = cmd.payload
             // this.initCanvas(width, height)
             return this.emit('initalized', cmd.payload)
-
         }
         default:
             return this.emit(cmd.action, cmd.payload)
@@ -198,13 +211,11 @@ class WSAvcPlayer extends EventEmitter {
 
     disconnect () {
         this.ws.close()
-
     }
-    // only send json!
+
     send (payload) {
         return this.ws.send(payload)
     }
 }
 
 module.exports = WSAvcPlayer
-module.exports.debug = debug
