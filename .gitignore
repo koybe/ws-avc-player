@@ -2,3 +2,4 @@
 /node_modules
 /disc
 .DS_Store
+lib/
