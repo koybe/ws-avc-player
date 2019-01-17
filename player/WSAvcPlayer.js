@@ -36,7 +36,6 @@ class WSAvcPlayer extends EventEmitter {
         this.avc.onPictureDecoded = (e, w, h, ...rest) => {
             return this.initCanvas(w, h, [ e, w, h, ...rest ])
         }
-
     }
 
 
@@ -112,7 +111,7 @@ class WSAvcPlayer extends EventEmitter {
         this.ws.onmessage = (evt) => {
 
             if (typeof evt.data == 'string') {
-                return this.cmd(JSON.parse(evt.data))
+                return this.emit('message', evt.data)
             }
 
             this.pktnum++
@@ -175,15 +174,12 @@ class WSAvcPlayer extends EventEmitter {
             }
             return canvas.decode(e, w, h, ...rest)
         }
-        this.canvas.style = `width:100%; height:${ height / width * 100 }vh;`
         this.canvas.width = width
         this.canvas.height = height
 
         if (dec) {
             return canvas.decode(...dec)
         }
-
-
     }
 
     cmd (cmd) {
@@ -205,8 +201,8 @@ class WSAvcPlayer extends EventEmitter {
 
     }
     // only send json!
-    send (action, payload) {
-        return this.ws.send(JSON.stringify({ action, payload }))
+    send (payload) {
+        return this.ws.send(payload)
     }
 }
 
