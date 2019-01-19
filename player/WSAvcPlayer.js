@@ -6,11 +6,6 @@ import YUVCanvas from 'canvas/YUVCanvas'
 import Size from 'utils/Size'
 import { EventEmitter } from 'events'
 
-import debug from 'debug' // ?? why?
-
-
-const log = debug('wsavc')
-
 class WSAvcPlayer extends EventEmitter {
     constructor (canvas, canvastype, useWorker) {
         super()
@@ -80,13 +75,13 @@ class WSAvcPlayer extends EventEmitter {
                 naltype = 'SPS'
                 setTimeout(() => {
                   this.emit('message', 'binary')
-                }, 100)
+                }, 200)
             }
             else if ((data[4] & 0x1f) === 8) {
                 naltype = 'PPS'
             }
         }
-        log(`Passed ${ naltype } to decoder ${ data[4] & 0x1f }`)
+        // log(`Passed ${ naltype } to decoder ${ data[4] & 0x1f }`)
         /* const now_new = new Date().getTime()
         const elapsed = now_new - this.now
         this.now = now_new
@@ -94,8 +89,7 @@ class WSAvcPlayer extends EventEmitter {
         this.avc.decode(data)
     }
 
-    connect(url, isPortrait) {
-        this.autoWidth = !isPortrait
+    connect(url) {
         // Websocket initialization
         if (this.ws !== undefined) {
             this.ws.close()
@@ -106,15 +100,23 @@ class WSAvcPlayer extends EventEmitter {
         this.ws.binaryType = 'arraybuffer'
 
         this.ws.onopen = () => {
-            log('Connected to ' + url)
+            // log('Connected to ' + url)
             this.emit('connected', url)
         }
 
         let framesList = []
 
         this.ws.onmessage = (evt) => {
-
             if (typeof evt.data == 'string') {
+                if (/^start /.test(evt.data)) {
+                    const config = JSON.parse(evt.data.substr('start '.length))
+                    if (config.orientation === 90 || config.orientation === 270) {
+                        this.autoWidth = true
+                    } else {
+                        this.autoWidth = false
+                    }
+                }
+
                 return this.emit('message', evt.data)
             }
 
@@ -134,7 +136,7 @@ class WSAvcPlayer extends EventEmitter {
 
             // 帧队列长度超过 30，判断是否有 SPS帧（即起始帧）
             if (framesList.length > 30) {
-                log('Dropping frames', framesList.length)
+                // log('Dropping frames', framesList.length)
                 const vI = framesList.findIndex(e => (e[4] & 0x1f) === 7)
                 // console.log('Dropping frames', framesList.length, vI)
                 if (vI >= 0) {
@@ -162,7 +164,7 @@ class WSAvcPlayer extends EventEmitter {
         this.ws.onclose = () => {
             running = false
             this.emit('disconnected')
-            log('WSAvcPlayer: Connection closed')
+            // log('WSAvcPlayer: Connection closed')
         }
 
         return this.ws
@@ -183,9 +185,11 @@ class WSAvcPlayer extends EventEmitter {
 
             return canvas.decode(e, w, h, ...rest)
         }
+
         if (this.canvas.parentNode && this.canvas.parentNode.parentNode) {
-            this.canvas.parentNode.parentNode.classList.toggle('letterboxed', this.autoWidth)
+            this.canvas.parentNode.parentNode.classList.toggle('letterboxed', this.autoWidth || false)
         }
+        this.emit('portrait', !this.autoWidth)
         
         this.canvas.width = width
         this.canvas.height = height
@@ -195,24 +199,8 @@ class WSAvcPlayer extends EventEmitter {
         }
     }
 
-    rotateCanvas () {
-      this.autoWidth = !this.autoWidth
-    }
-
-    cmd (cmd) {
-        log('Incoming request', cmd)
-        switch (cmd.action) {
-        case 'initalize': {
-            const { width, height } = cmd.payload
-            // this.initCanvas(width, height)
-            return this.emit('initalized', cmd.payload)
-        }
-        default:
-            return this.emit(cmd.action, cmd.payload)
-        }
-    }
-
     disconnect () {
+        this.ws.onerror = this.ws.onclose = this.ws.onmessage = this.ws.onopen = null
         this.ws.close()
     }
 
