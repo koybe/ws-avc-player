@@ -294,7 +294,7 @@ function A(a){a&&(p.print(a),p.fa(a));H=i;d("abort() at "+Fa()+"\nIf this abort(
     }, function ($buffer, width, height) {
       var buffer = this.pictureBuffers[$buffer];
       if (!buffer) {
-        buffer = this.pictureBuffers[$buffer] = toU8Array($buffer, (width * height * 3) / 2);
+        buffer = this.pictureBuffers[$buffer] = toU8Array($buffer, (width * height * 4) / 2);
       };
       
       var infos;
