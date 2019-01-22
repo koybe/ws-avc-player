@@ -257,7 +257,7 @@ export default class WebGLCanvas {
 function resize (canvas) {
     // Lookup the size the browser is displaying the canvas.
     // 支持高清屏 https://webglfundamentals.org/webgl/lessons/zh_cn/webgl-resizing-the-canvas.html
-    const realToCSSPixels = window.devicePixelRatio || 1
+    const realToCSSPixels = window.devicePixelRatio >= 2 ? window.devicePixelRatio : 2
 
     // 获取浏览器显示的画布的CSS像素值
     // 然后计算出设备像素设置drawingbuffer
